@@ -25,6 +25,32 @@
             transform: translateY(1px);
             box-shadow: none;
         }
+        /* Dark mode styles */
+        .dark-mode {
+            background-color: #1a202c;
+            color: #f7fafc;
+        }
+        .dark-mode .bg-white {
+            background-color: #2d3748;
+        }
+        .dark-mode .text-gray-600 {
+            color: #a0aec0;
+        }
+        .dark-mode .text-gray-700 {
+            color: #cbd5e0;
+        }
+        .dark-mode .text-gray-800 {
+            color: #e2e8f0;
+        }
+        .dark-mode .border-gray-100 {
+            border-color: #4a5568;
+        }
+        .dark-mode .bg-blue-50 {
+            background-color: #2a4365;
+        }
+        .dark-mode .border-blue-500 {
+            border-color: #63b3ed;
+        }
     </style>
 </head>
 <body class="min-h-screen flex items-center justify-center p-4">
@@ -37,8 +63,16 @@
             <p class="text-gray-600 text-lg">Személyes adatok gyakorlása</p>
             <div class="mt-4 text-xl font-semibold text-gray-700">
                 Pontszám: <span id="score" class="text-green-600">0</span> / <span id="total-questions">0</span>
+                <span class="ml-4 text-base text-gray-500">(Kérdés: <span id="current-question-number">0</span> / <span id="total-questions-2">0</span>)</span>
             </div>
         </header>
+
+        <!-- Dark Mode Toggle -->
+        <div class="text-center mb-4">
+            <button id="dark-mode-toggle" class="primary-btn bg-gray-800 text-white font-bold py-2 px-4 rounded-lg text-lg">
+                🌙 Sötét mód
+            </button>
+        </div>
 
         <!-- Question Section -->
         <div id="game-content">
@@ -65,6 +99,19 @@
         <!-- End Screen/Initialization Screen -->
         <div id="end-screen" class="hidden text-center mt-6">
             <h3 id="end-message" class="text-3xl font-bold text-gray-800 mb-4"></h3>
+            <div id="results-table-container" class="overflow-x-auto mb-6">
+                <table id="results-table" class="w-full text-left border-collapse" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th class="px-2 py-1">Kérdés</th>
+                            <th class="px-2 py-1">Helyes válasz</th>
+                            <th class="px-2 py-1">A te válaszod</th>
+                            <th class="px-2 py-1">Eredmény</th>
+                        </tr>
+                    </thead>
+                    <tbody id="results-table-body"></tbody>
+                </table>
+            </div>
             <button id="restart-btn" class="primary-btn bg-green-500 text-white font-bold py-3 px-6 rounded-lg text-lg">
                 Újraindítás
             </button>
@@ -104,6 +151,7 @@
         let currentQuestionIndex = 0;
         let score = 0;
         let isAnswerSubmitted = false;
+        let userAnswers = [];
 
         // DOM elemek lekérése
         const questionWordEl = document.getElementById('question-word');
@@ -113,10 +161,13 @@
         const feedbackMessageEl = document.getElementById('feedback-message');
         const scoreEl = document.getElementById('score');
         const totalQuestionsEl = document.getElementById('total-questions');
+        const currentQuestionNumberEl = document.getElementById('current-question-number');
+        const totalQuestions2El = document.getElementById('total-questions-2');
         const gameContentEl = document.getElementById('game-content');
         const endScreenEl = document.getElementById('end-screen');
         const endMessageEl = document.getElementById('end-message');
         const restartBtn = document.getElementById('restart-btn');
+        const darkModeToggle = document.getElementById('dark-mode-toggle');
 
         /**
          * Segédfunkció: Keveri az elemeket egy tömbben (Fisher-Yates shuffle).
@@ -138,6 +189,7 @@
             currentQuestionIndex = 0;
             score = 0;
             isAnswerSubmitted = false;
+            userAnswers = [];
             
             // Létrehozza a kérdéseket véletlenszerű iránnyal
             wordPairs.forEach(pair => {
@@ -165,6 +217,7 @@
             
             // Frissíti a pontszám kijelzőt
             totalQuestionsEl.textContent = questions.length;
+            totalQuestions2El.textContent = questions.length;
             updateScoreDisplay();
 
             // Beállítja az UI-t
@@ -185,6 +238,7 @@
                 const currentQuestion = questions[currentQuestionIndex];
                 questionWordEl.textContent = currentQuestion.question;
                 directionInfoEl.textContent = currentQuestion.direction;
+                currentQuestionNumberEl.textContent = currentQuestionIndex + 1;
                 answerInputEl.value = '';
                 feedbackMessageEl.textContent = '';
                 submitBtn.textContent = 'Ellenőrzés';
@@ -208,17 +262,25 @@
                 return;
             }
 
-            const userAnswer = answerInputEl.value.trim().toLowerCase();
-            const correctAnswer = questions[currentQuestionIndex].answer.trim().toLowerCase();
+            const userAnswer = answerInputEl.value.trim();
+            const correctAnswer = questions[currentQuestionIndex].answer.trim();
+            const isCorrect = userAnswer.toLowerCase() === correctAnswer.toLowerCase();
 
-            if (userAnswer === correctAnswer) {
+            userAnswers[currentQuestionIndex] = {
+                question: questions[currentQuestionIndex].question,
+                correct: correctAnswer,
+                user: userAnswer,
+                result: isCorrect ? '✅' : '❌'
+            };
+
+            if (isCorrect) {
                 // Helyes válasz
                 score++;
                 feedbackMessageEl.textContent = 'Helyes! ✅';
                 feedbackMessageEl.className = 'text-center mt-4 text-lg font-semibold text-green-600';
             } else {
                 // Helytelen válasz
-                feedbackMessageEl.textContent = `Helytelen. ❌ A helyes válasz: "${questions[currentQuestionIndex].answer}"`;
+                feedbackMessageEl.textContent = `Helytelen. ❌ A helyes válasz: "${correctAnswer}"`;
                 feedbackMessageEl.className = 'text-center mt-4 text-lg font-semibold text-red-600';
             }
             
@@ -238,6 +300,27 @@
 
             const percentage = Math.round((score / questions.length) * 100);
             endMessageEl.innerHTML = `Vége a kvíznek! <br> Eredményed: ${score} / ${questions.length} (${percentage}%)`;
+            renderResultsTable();
+        }
+
+        /**
+         * Megjeleníti az eredményeket egy táblázatban.
+         */
+        function renderResultsTable() {
+            const table = document.getElementById('results-table');
+            const tbody = document.getElementById('results-table-body');
+            tbody.innerHTML = '';
+            userAnswers.forEach((item, idx) => {
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-2 py-1">${item.question}</td>
+                    <td class="px-2 py-1">${item.correct}</td>
+                    <td class="px-2 py-1">${item.user}</td>
+                    <td class="px-2 py-1">${item.result}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+            table.style.display = 'table';
         }
 
         /**
@@ -256,6 +339,16 @@
             if (e.key === 'Enter' && !submitBtn.disabled) {
                 e.preventDefault();
                 checkAnswer();
+            }
+        });
+
+        // Dark mode toggle
+        darkModeToggle.addEventListener('click', () => {
+            document.body.classList.toggle('dark-mode');
+            if (document.body.classList.contains('dark-mode')) {
+                darkModeToggle.textContent = '☀️ Világos mód';
+            } else {
+                darkModeToggle.textContent = '🌙 Sötét mód';
             }
         });
 
